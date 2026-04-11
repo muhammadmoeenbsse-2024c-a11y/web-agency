@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+@theme {
+  --font-headline: "Plus Jakarta Sans", sans-serif;
+  --font-body: "Inter", sans-serif;
+  --font-label: "Inter", sans-serif;
+
+  --color-primary-container: #00a8e1;
+  --color-on-primary-container: #00384e;
+  --color-surface-dim: #0c141b;
+  --color-surface-container-low: #141c24;
+  --color-surface-container-high: #232b32;
+  --color-on-surface: #dbe3ed;
+  --color-on-surface-variant: #bdc8d0;
+  --color-outline-variant: #3e484f;
+}
+
+@layer base {
+  body {
+    @apply bg-surface-dim text-on-surface font-body;
+  }
+}
+
+@layer components {
+  .cinematic-mask {
+    background: linear-gradient(to right, #0c141b 10%, rgba(12, 20, 27, 0.4) 50%, rgba(12, 20, 27, 0) 100%);
+  }
+  .cinematic-mask-v {
+    background: linear-gradient(to top, #0c141b 0%, rgba(12, 20, 27, 0) 100%);
+  }
+}

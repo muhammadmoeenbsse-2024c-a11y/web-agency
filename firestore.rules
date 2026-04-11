@@ -1,0 +1,66 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: portfolio
+    // Document ID: auto-generated
+    // Fields:
+    //   - title: string (required)
+    //   - description: string (optional)
+    //   - imageUrl: string (required, URL)
+    //   - link: string (optional, URL)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: contacts
+    // Document ID: auto-generated
+    // Fields:
+    //   - name: string (required)
+    //   - email: string (required, email)
+    //   - message: string (required)
+    //   - createdAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.email == "muhammad.moeen.bsse-2024c@cecosian.edu.pk" && 
+         request.auth.token.email_verified == true);
+    }
+
+    function isValidPortfolioItem(data) {
+      return data.keys().hasAll(['title', 'imageUrl', 'createdAt']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 100 &&
+             data.imageUrl is string && data.imageUrl.matches("^https?://.*") &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidContactSubmission(data) {
+      return data.keys().hasAll(['name', 'email', 'message', 'createdAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.email is string && data.email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$") &&
+             data.message is string && data.message.size() > 0 && data.message.size() < 5000 &&
+             data.createdAt is timestamp;
+    }
+
+    // Portfolio Rules
+    match /portfolio/{itemId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin() && isValidPortfolioItem(request.resource.data);
+    }
+
+    // Contact Rules
+    match /contacts/{contactId} {
+      allow create: if isValidContactSubmission(request.resource.data);
+      allow read, update, delete: if isAdmin();
+    }
+  }
+}
