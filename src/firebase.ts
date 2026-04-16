@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
-import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp, getDocFromServer } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, query, orderBy, serverTimestamp, getDocFromServer } from 'firebase/firestore';
 import localConfig from '../firebase-applet-config.json';
 
 // Use environment variables for production (Vercel)
@@ -32,4 +32,4 @@ async function testConnection() {
 }
 testConnection();
 
-export { collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp, signInWithPopup, signOut };
+export { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, query, orderBy, serverTimestamp, signInWithPopup, signOut };

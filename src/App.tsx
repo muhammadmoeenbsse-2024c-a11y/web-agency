@@ -7,6 +7,7 @@ import {
   addDoc, 
   deleteDoc,
   doc,
+  updateDoc,
   onSnapshot, 
   query, 
   orderBy, 
@@ -22,7 +23,7 @@ import {
   Info, 
   Zap, 
   Film, 
-  TrendingUp, 
+  TrendingUp,
   Layout, 
   Settings, 
   Edit3, 
@@ -30,7 +31,12 @@ import {
   ArrowRight, 
   Plus,
   LogOut,
-  Trash2
+  Trash2,
+  ChevronLeft,
+  Mail,
+  Briefcase,
+  ExternalLink,
+  Clock
 } from 'lucide-react';
 
 // Types
@@ -43,14 +49,26 @@ interface PortfolioItem {
   createdAt: any;
 }
 
+interface ContactSubmission {
+  id: string;
+  name: string;
+  email: string;
+  message: string;
+  createdAt: any;
+}
+
 export default function App() {
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>([]);
+  const [contacts, setContacts] = useState<ContactSubmission[]>([]);
   const [user, setUser] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isAdminPortalOpen, setIsAdminPortalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'portfolio' | 'contacts'>('portfolio');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isContactSubmitting, setIsContactSubmitting] = useState(false);
   const [contactSuccess, setContactSuccess] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<PortfolioItem | null>(null);
 
   // Form states
   const [contactForm, setContactForm] = useState({ name: '', email: '', message: '' });
@@ -66,8 +84,8 @@ export default function App() {
     });
 
     // Portfolio listener
-    const q = query(collection(db, 'portfolio'), orderBy('createdAt', 'desc'));
-    const unsubscribePortfolio = onSnapshot(q, (snapshot) => {
+    const qPortfolio = query(collection(db, 'portfolio'), orderBy('createdAt', 'desc'));
+    const unsubscribePortfolio = onSnapshot(qPortfolio, (snapshot) => {
       const items = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
@@ -75,11 +93,25 @@ export default function App() {
       setPortfolio(items);
     });
 
+    // Contacts listener (only for admin)
+    let unsubscribeContacts = () => {};
+    if (isAdmin) {
+      const qContacts = query(collection(db, 'contacts'), orderBy('createdAt', 'desc'));
+      unsubscribeContacts = onSnapshot(qContacts, (snapshot) => {
+        const items = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as ContactSubmission[];
+        setContacts(items);
+      });
+    }
+
     return () => {
       unsubscribeAuth();
       unsubscribePortfolio();
+      unsubscribeContacts();
     };
-  }, []);
+  }, [isAdmin]);
 
   const handleLogin = async () => {
     try {
@@ -92,6 +124,7 @@ export default function App() {
   const handleLogout = async () => {
     try {
       await signOut(auth);
+      setIsAdminPortalOpen(false);
     } catch (error) {
       console.error("Logout failed:", error);
     }
@@ -118,14 +151,21 @@ export default function App() {
   const handleAddPortfolio = async (e: FormEvent) => {
     e.preventDefault();
     try {
-      await addDoc(collection(db, 'portfolio'), {
-        ...portfolioForm,
-        createdAt: serverTimestamp()
-      });
+      if (editingItem) {
+        await updateDoc(doc(db, 'portfolio', editingItem.id), {
+          ...portfolioForm
+        });
+      } else {
+        await addDoc(collection(db, 'portfolio'), {
+          ...portfolioForm,
+          createdAt: serverTimestamp()
+        });
+      }
       setIsModalOpen(false);
+      setEditingItem(null);
       setPortfolioForm({ title: '', description: '', imageUrl: '', link: '' });
     } catch (error) {
-      console.error("Failed to add portfolio item:", error);
+      console.error("Failed to add/update portfolio item:", error);
     }
   };
 
@@ -138,10 +178,244 @@ export default function App() {
     }
   };
 
+  const handleDeleteContact = async (id: string) => {
+    if (!window.confirm("Delete this contact submission?")) return;
+    try {
+      await deleteDoc(doc(db, 'contacts', id));
+    } catch (error) {
+      console.error("Failed to delete contact:", error);
+    }
+  };
+
+  const openEditModal = (item: PortfolioItem) => {
+    setEditingItem(item);
+    setPortfolioForm({
+      title: item.title,
+      description: item.description,
+      imageUrl: item.imageUrl,
+      link: item.link
+    });
+    setIsModalOpen(true);
+  };
+
   const scrollToContact = () => {
     const element = document.getElementById('contact');
     element?.scrollIntoView({ behavior: 'smooth' });
   };
+
+  if (isAdminPortalOpen && isAdmin) {
+    return (
+      <div className="min-h-screen bg-surface-dim text-on-surface flex flex-col">
+        {/* Admin Header */}
+        <header className="bg-surface-container-low border-b border-white/5 px-8 py-4 flex justify-between items-center sticky top-0 z-50">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setIsAdminPortalOpen(false)}
+              className="p-2 hover:bg-white/5 rounded-full transition-colors"
+            >
+              <ChevronLeft size={24} />
+            </button>
+            <h1 className="text-xl font-headline font-bold text-white">Admin Portal</h1>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 px-4 py-2 bg-white/5 rounded-full border border-white/10">
+              <img src={user.photoURL} alt={user.displayName} className="w-6 h-6 rounded-full" />
+              <span className="text-sm font-medium text-white">{user.displayName}</span>
+            </div>
+            <button onClick={handleLogout} className="text-slate-400 hover:text-white transition-colors">
+              <LogOut size={20} />
+            </button>
+          </div>
+        </header>
+
+        <div className="flex flex-1 overflow-hidden">
+          {/* Sidebar */}
+          <aside className="w-64 bg-surface-container-low border-r border-white/5 p-6 hidden md:block">
+            <nav className="space-y-2">
+              <button 
+                onClick={() => setActiveTab('portfolio')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'portfolio' ? 'bg-primary-container text-on-primary-container font-bold' : 'text-slate-400 hover:bg-white/5'}`}
+              >
+                <Briefcase size={20} /> Portfolio
+              </button>
+              <button 
+                onClick={() => setActiveTab('contacts')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'contacts' ? 'bg-primary-container text-on-primary-container font-bold' : 'text-slate-400 hover:bg-white/5'}`}
+              >
+                <Mail size={20} /> Contacts
+              </button>
+            </nav>
+          </aside>
+
+          {/* Main Content */}
+          <main className="flex-1 overflow-y-auto p-8">
+            <div className="max-w-5xl mx-auto">
+              {activeTab === 'portfolio' ? (
+                <div className="space-y-6">
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-2xl font-bold text-white">Manage Projects</h2>
+                    <button 
+                      onClick={() => {
+                        setEditingItem(null);
+                        setPortfolioForm({ title: '', description: '', imageUrl: '', link: '' });
+                        setIsModalOpen(true);
+                      }}
+                      className="bg-primary-container text-on-primary-container px-6 py-2 rounded-lg font-bold flex items-center gap-2 hover:scale-105 transition-all"
+                    >
+                      <Plus size={18} /> New Project
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    {portfolio.map(item => (
+                      <div key={item.id} className="bg-surface-container-high rounded-2xl p-4 flex items-center gap-6 border border-white/5 group">
+                        <img src={item.imageUrl} className="w-24 h-24 rounded-xl object-cover" alt={item.title} />
+                        <div className="flex-1">
+                          <h3 className="text-lg font-bold text-white">{item.title}</h3>
+                          <p className="text-slate-400 text-sm line-clamp-1">{item.description}</p>
+                          <div className="flex items-center gap-4 mt-2">
+                            <a href={item.link} target="_blank" className="text-primary-container text-xs flex items-center gap-1 hover:underline">
+                              <ExternalLink size={12} /> Live Link
+                            </a>
+                            <span className="text-slate-600 text-xs flex items-center gap-1">
+                              <Clock size={12} /> {item.createdAt?.toDate().toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => openEditModal(item)}
+                            className="p-3 bg-white/5 hover:bg-white/10 rounded-xl text-slate-400 hover:text-white transition-all"
+                          >
+                            <Edit3 size={18} />
+                          </button>
+                          <button 
+                            onClick={() => handleDeletePortfolio(item.id)}
+                            className="p-3 bg-white/5 hover:bg-red-500/10 rounded-xl text-slate-400 hover:text-red-500 transition-all"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <h2 className="text-2xl font-bold text-white">Contact Submissions</h2>
+                  <div className="grid grid-cols-1 gap-4">
+                    {contacts.map(contact => (
+                      <div key={contact.id} className="bg-surface-container-high rounded-2xl p-6 border border-white/5">
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <h3 className="text-lg font-bold text-white">{contact.name}</h3>
+                            <p className="text-primary-container text-sm">{contact.email}</p>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <span className="text-slate-500 text-xs">{contact.createdAt?.toDate().toLocaleString()}</span>
+                            <button 
+                              onClick={() => handleDeleteContact(contact.id)}
+                              className="text-slate-600 hover:text-red-500 transition-colors"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+                        </div>
+                        <p className="text-on-surface-variant bg-surface-dim p-4 rounded-xl border border-white/5 italic">
+                          "{contact.message}"
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </main>
+        </div>
+
+        {/* Admin Modal (Add/Edit) */}
+        <AnimatePresence>
+          {isModalOpen && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+              <motion.div 
+                initial={{ opacity: 0 }} 
+                animate={{ opacity: 1 }} 
+                exit={{ opacity: 0 }}
+                onClick={() => setIsModalOpen(false)}
+                className="absolute inset-0 bg-slate-950/90 backdrop-blur-sm"
+              />
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                className="relative bg-surface-container-high w-full max-w-lg rounded-3xl p-8 border border-white/10 shadow-2xl"
+              >
+                <h2 className="text-2xl font-bold text-white mb-6">{editingItem ? 'Edit Project' : 'Add New Project'}</h2>
+                <form onSubmit={handleAddPortfolio} className="space-y-4">
+                  <div>
+                    <label className="block text-xs uppercase tracking-widest text-slate-500 mb-1">Project Title</label>
+                    <input 
+                      type="text" 
+                      required
+                      value={portfolioForm.title}
+                      onChange={e => setPortfolioForm({...portfolioForm, title: e.target.value})}
+                      className="w-full bg-surface-dim border border-white/10 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-primary-container/50 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs uppercase tracking-widest text-slate-500 mb-1">Description</label>
+                    <textarea 
+                      required
+                      rows={3}
+                      value={portfolioForm.description}
+                      onChange={e => setPortfolioForm({...portfolioForm, description: e.target.value})}
+                      className="w-full bg-surface-dim border border-white/10 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-primary-container/50 outline-none resize-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs uppercase tracking-widest text-slate-500 mb-1">Image URL</label>
+                    <input 
+                      type="url" 
+                      required
+                      value={portfolioForm.imageUrl}
+                      onChange={e => setPortfolioForm({...portfolioForm, imageUrl: e.target.value})}
+                      className="w-full bg-surface-dim border border-white/10 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-primary-container/50 outline-none"
+                      placeholder="https://images.unsplash.com/..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs uppercase tracking-widest text-slate-500 mb-1">Project Link</label>
+                    <input 
+                      type="url" 
+                      value={portfolioForm.link}
+                      onChange={e => setPortfolioForm({...portfolioForm, link: e.target.value})}
+                      className="w-full bg-surface-dim border border-white/10 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-primary-container/50 outline-none"
+                      placeholder="https://your-project.com"
+                    />
+                  </div>
+                  <div className="flex gap-4 pt-4">
+                    <button 
+                      type="button"
+                      onClick={() => setIsModalOpen(false)}
+                      className="flex-1 py-4 rounded-xl font-bold text-slate-400 hover:bg-white/5 transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      type="submit"
+                      className="flex-1 bg-primary-container text-on-primary-container py-4 rounded-xl font-bold hover:scale-[1.02] active:scale-[0.98] transition-all"
+                    >
+                      {editingItem ? 'Save Changes' : 'Add Project'}
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-surface-dim text-on-surface selection:bg-primary-container selection:text-on-primary-container">
@@ -158,10 +432,10 @@ export default function App() {
             ))}
             {isAdmin && (
               <button 
-                onClick={() => setIsModalOpen(true)}
+                onClick={() => setIsAdminPortalOpen(true)}
                 className="flex items-center gap-2 text-primary hover:text-white transition-colors font-label text-sm uppercase tracking-wide"
               >
-                <Plus size={16} /> Add Project
+                <Settings size={16} /> Dashboard
               </button>
             )}
           </div>
@@ -479,91 +753,18 @@ export default function App() {
                 Admin
               </button>
             )}
+            {isAdmin && (
+              <button 
+                onClick={() => setIsAdminPortalOpen(true)}
+                className="text-primary-container hover:text-white transition-colors text-sm uppercase tracking-wide font-bold"
+              >
+                Portal
+              </button>
+            )}
           </div>
           <p className="text-slate-500 text-sm">© 2024 Zerotosite Agency. All rights reserved.</p>
         </div>
       </footer>
-
-      {/* Admin Modal */}
-      <AnimatePresence>
-        {isModalOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
-            <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }}
-              onClick={() => setIsModalOpen(false)}
-              className="absolute inset-0 bg-slate-950/90 backdrop-blur-sm"
-            />
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="relative bg-surface-container-high w-full max-w-lg rounded-3xl p-8 border border-white/10 shadow-2xl"
-            >
-              <h2 className="text-2xl font-bold text-white mb-6">Add New Project</h2>
-              <form onSubmit={handleAddPortfolio} className="space-y-4">
-                <div>
-                  <label className="block text-xs uppercase tracking-widest text-slate-500 mb-1">Project Title</label>
-                  <input 
-                    type="text" 
-                    required
-                    value={portfolioForm.title}
-                    onChange={e => setPortfolioForm({...portfolioForm, title: e.target.value})}
-                    className="w-full bg-surface-dim border border-white/10 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-primary-container/50 outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs uppercase tracking-widest text-slate-500 mb-1">Description</label>
-                  <textarea 
-                    required
-                    rows={3}
-                    value={portfolioForm.description}
-                    onChange={e => setPortfolioForm({...portfolioForm, description: e.target.value})}
-                    className="w-full bg-surface-dim border border-white/10 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-primary-container/50 outline-none resize-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs uppercase tracking-widest text-slate-500 mb-1">Image URL</label>
-                  <input 
-                    type="url" 
-                    required
-                    value={portfolioForm.imageUrl}
-                    onChange={e => setPortfolioForm({...portfolioForm, imageUrl: e.target.value})}
-                    className="w-full bg-surface-dim border border-white/10 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-primary-container/50 outline-none"
-                    placeholder="https://images.unsplash.com/..."
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs uppercase tracking-widest text-slate-500 mb-1">Project Link</label>
-                  <input 
-                    type="url" 
-                    value={portfolioForm.link}
-                    onChange={e => setPortfolioForm({...portfolioForm, link: e.target.value})}
-                    className="w-full bg-surface-dim border border-white/10 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-primary-container/50 outline-none"
-                    placeholder="https://your-project.com"
-                  />
-                </div>
-                <div className="flex gap-4 pt-4">
-                  <button 
-                    type="button"
-                    onClick={() => setIsModalOpen(false)}
-                    className="flex-1 py-4 rounded-xl font-bold text-slate-400 hover:bg-white/5 transition-all"
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    type="submit"
-                    className="flex-1 bg-primary-container text-on-primary-container py-4 rounded-xl font-bold hover:scale-[1.02] active:scale-[0.98] transition-all"
-                  >
-                    Add Project
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
